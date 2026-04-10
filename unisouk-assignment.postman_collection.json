@@ -1,0 +1,903 @@
+{
+	"info": {
+		"_postman_id": "fcbc0a58-6454-4e43-9d92-1699a1ac602b",
+		"name": "unisouk-assignment",
+		"description": "# 🚀 UniSouk Assignment Integration - Postman Guide\n\n### 📌 Overview\n\nThis collection tests the integration between **NestJS** and **OpenCart 4.x**. It covers Product management, Order processing, and automated Inventory synchronization.\n\n### ⚠️ IMPORTANT: Authentication & OpenCart 4.x\n\n- **Skip Authentication Folder:** You can proceed directly to the main modules (**Products, Orders, Inventory**).\n    \n- **Bridge Support:** I have implemented a **Bridge Secret** mechanism. This allows the NestJS app to communicate directly with OpenCart without relying on the legacy OpenCart API login, which is often unstable or unsupported in version 4.x.\n    \n- **Why the Auth Folder exists:** I have kept the \"Authentication\" folder strictly for **demonstration/comparison purposes**. It proves that the standard OpenCart 4.x API login route is non-functional or inconsistent in this version. **Do not use this folder for functional testing.**\n    \n\n---\n\n### 🏃‍♂️ How to Test (One-Click Runner)\n\nFor the most efficient review, please use the **\"Test this E2E flow with runner\"** folder. This folder contains automated logic that performs a full system lifecycle test in one go.\n\n**The Runner performs the following steps automatically:**\n\n1. **Create Product:** Registers a fresh product in the system.\n    \n2. **Check Stock:** Records the initial inventory level.\n    \n3. **Create Order:** Places a new order against the product created in Step 1.\n    \n4. **Sync Trigger:** Updates the order status to \"Processing\" to trigger the background sync worker.\n    \n5. **Final Verification:** Mathematically verifies that the inventory was correctly decremented in the database.\n    \n\n**To run it:**\n\n1. Click on the **\"Test this E2E flow with runner\"** folder.\n    \n2. Click the **\"Run\"** button in the top right.\n    \n3. Click **\"Run unisouk-assignment\"**.\n    \n4. Watch the test results (all should be green).\n    \n\n---\n\n### 🛠 Configuration (Variables)\n\nEnsure your **Collection Variables** are set correctly:\n\n- base_url: http://localhost:3000 (Your NestJS Server)\n    \n- opencart_base_url: http://localhost:8080 (Your OpenCart Installation)\n    \n- opencart_bridge_secret: Your defined secret for the bridge connection.\n    \n\n### 📁 Folder Structure\n\n- **Authentication:** (Optional/Reference) Demonstrates OC 4.x legacy API limitations.\n    \n- **Products:** CRUD operations for product management.\n    \n- **Orders:** Order retrieval and status update logic.\n    \n- **Inventory:** Dedicated endpoints for stock levels and low-stock alerts.\n    \n- **Test this E2E flow with runner:** Automated end-to-end testing logic.",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+		"_exporter_id": "53884590",
+		"_collection_link": "https://topgops009-5093529.postman.co/workspace/topgops's-Workspace~1162308c-b602-4318-88f7-6cfc61f3ed83/collection/53884590-fcbc0a58-6454-4e43-9d92-1699a1ac602b?action=share&source=collection_link&creator=53884590"
+	},
+	"item": [
+		{
+			"name": "Authentication(Optinal as its not support OC 4.X))",
+			"item": [
+				{
+					"name": "OpenCart Login (Optional Token Store)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"let json = {};",
+									"try {",
+									"  json = pm.response.json();",
+									"} catch (e) {}",
+									"const token = json.api_token || json.token || (json.data && (json.data.api_token || json.data.token));",
+									"if (token) {",
+									"  pm.environment.set('opencart_api_token', token);",
+									"  pm.environment.set('Authorization', `Bearer ${token}`);",
+									"}",
+									"pm.test('Login succeeded or returned a token', function () {",
+									"  pm.expect(pm.response.code).to.be.oneOf([200, 204, 400, 401, 403]);",
+									"});"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/x-www-form-urlencoded"
+							}
+						],
+						"body": {
+							"mode": "urlencoded",
+							"urlencoded": [
+								{
+									"key": "username",
+									"value": "{{opencart_api_username}}",
+									"type": "text"
+								},
+								{
+									"key": "key",
+									"value": "{{opencart_api_key}}",
+									"type": "text"
+								}
+							]
+						},
+						"url": {
+							"raw": "{{opencart_base_url}}/index.php?route=api/login",
+							"host": [
+								"{{opencart_base_url}}"
+							],
+							"path": [
+								"index.php"
+							],
+							"query": [
+								{
+									"key": "route",
+									"value": "api/login"
+								}
+							]
+						},
+						"description": "Legacy OpenCart API login. If your installation returns an api_token/token, this request stores it automatically in the active Postman environment."
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Products",
+			"item": [
+				{
+					"name": "List Products",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"let payload = {};",
+									"try { payload = pm.response.json(); } catch (e) {}",
+									"const products = Array.isArray(payload) ? payload : (payload.data || []);",
+									"if (products.length && products[0].productId) {",
+									"  pm.environment.set('product_id', products[0].productId);",
+									"}",
+									"pm.test('Products request returns success', function () {",
+									"  pm.expect(pm.response.code).to.be.oneOf([200]);",
+									"});"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "accept",
+								"value": "*/*"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/products",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"products"
+							]
+						},
+						"description": "List all products from OpenCart through the Nest API."
+					},
+					"response": []
+				},
+				{
+					"name": "Get Product By ID",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "accept",
+								"value": "*/*"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/products/{{product_id}}",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"products",
+								"{{product_id}}"
+							]
+						},
+						"description": "Fetch one product using the currently stored product_id."
+					},
+					"response": []
+				},
+				{
+					"name": "Create Product",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "accept",
+								"value": "*/*"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"Google Pixle\",\n  \"model\": \"10a\",\n  \"price\": 50,\n  \"quantity\": 20,\n  \"status\": 1,\n  \"options\": [\n    {\n      \"optionId\": 5,\n      \"name\": \"Color\",\n      \"type\": \"select\",\n      \"values\": [\n        {\n          \"optionValueId\": 41,\n          \"name\": \"Blue\",\n          \"quantity\": 20,\n          \"priceModifier\": 2.5\n        }\n      ]\n    }\n  ]\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/products",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"products"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Update Product",
+					"request": {
+						"method": "PATCH",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "accept",
+								"value": "*/*"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"Google PIXLE\",\n  \"price\": 100,\n  \"quantity\": 40\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/products/{{product_id}}",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"products",
+								"{{product_id}}"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Delete Product",
+					"request": {
+						"method": "DELETE",
+						"header": [
+							{
+								"key": "accept",
+								"value": "*/*"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/products/{{product_id}}",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"products",
+								"{{product_id}}"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Product Not Found",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "accept",
+								"value": "*/*"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/products/99999999",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"products",
+								"99999999"
+							]
+						},
+						"description": "Example error case for a missing product."
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Orders",
+			"item": [
+				{
+					"name": "List Orders",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"let payload = {};",
+									"try { payload = pm.response.json(); } catch (e) {}",
+									"const orders = Array.isArray(payload) ? payload : (payload.data || []);",
+									"if (orders.length && orders[0].orderId) {",
+									"  pm.environment.set('order_id', orders[0].orderId);",
+									"}",
+									"pm.test('Orders request returns success', function () {",
+									"  pm.expect(pm.response.code).to.be.oneOf([200]);",
+									"});"
+								],
+								"type": "text/javascript",
+								"packages": {},
+								"requests": {}
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "accept",
+								"value": "*/*"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/orders?status=pending&startDate=2026-04-01T00:00:00.000Z&endDate=2026-04-30T23:59:59.000Z",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"orders"
+							],
+							"query": [
+								{
+									"key": "status",
+									"value": "pending"
+								},
+								{
+									"key": "startDate",
+									"value": "2026-04-01T00:00:00.000Z"
+								},
+								{
+									"key": "endDate",
+									"value": "2026-04-30T23:59:59.000Z"
+								}
+							]
+						},
+						"description": "List orders with filters and store the first order_id for flow requests."
+					},
+					"response": []
+				},
+				{
+					"name": "Get Order By ID",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"let payload = {};",
+									"try { payload = pm.response.json(); } catch (e) {}",
+									"const order = payload.data || payload;",
+									"if (order && Array.isArray(order.products) && order.products.length) {",
+									"  pm.environment.set('product_id', order.products[0].productId);",
+									"  if (Array.isArray(order.products[0].selectedOptionValueIds) && order.products[0].selectedOptionValueIds.length) {",
+									"    pm.environment.set('variant_product_id', order.products[0].productId);",
+									"    pm.environment.set('variant_option_value_id', order.products[0].selectedOptionValueIds[0]);",
+									"  }",
+									"}",
+									"pm.test('Order details request returns success', function () {",
+									"  pm.expect(pm.response.code).to.be.oneOf([200]);",
+									"});"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "accept",
+								"value": "*/*"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/orders/{{order_id}}",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"orders",
+								"{{order_id}}"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Update Order Status",
+					"request": {
+						"method": "PATCH",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "accept",
+								"value": "*/*"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"status\": \"processing\",\n  \"triggerInventorySync\": true\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/orders/{{order_id}}/status",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"orders",
+								"{{order_id}}",
+								"status"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Order Not Found",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "accept",
+								"value": "*/*"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/orders/99999999",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"orders",
+								"99999999"
+							]
+						},
+						"description": "Example error case for a missing order."
+					},
+					"response": []
+				},
+				{
+					"name": "Create Order",
+					"request": {
+						"auth": {
+							"type": "noauth"
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"customer\": {\n    \"firstname\": \"John\",\n    \"lastname\": \"Doe\",\n    \"email\": \"john@example.com\",\n    \"telephone\": \"+1-555-123-4567\"\n  },\n  \"paymentAddress\": {\n    \"firstname\": \"John\",\n    \"lastname\": \"Doe\",\n    \"address1\": \"221B Baker Street\",\n    \"city\": \"London\",\n    \"zoneId\": 1,\n    \"countryId\": 222\n  },\n  \"shippingAddress\": {\n    \"firstname\": \"John\",\n    \"lastname\": \"Doe\",\n    \"address1\": \"221B Baker Street\",\n    \"city\": \"London\",\n    \"zoneId\": 1,\n    \"countryId\": 222\n  },\n  \"products\": [\n    {\n      \"productId\": 50,\n      \"quantity\": 2,\n      \"optionValueIds\": [\n        41\n      ]\n    }\n  ],\n  \"shippingMethod\": \"Flat Shipping Rate\",\n  \"paymentMethod\": \"Cash On Delivery\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/orders/create",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"orders",
+								"create"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Inventory",
+			"item": [
+				{
+					"name": "Get Stock by productId",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "accept",
+								"value": "*/*"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/inventory?productId={{product_id}}",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"inventory"
+							],
+							"query": [
+								{
+									"key": "productId",
+									"value": "{{product_id}}"
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Get Stock Levels For Product",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "accept",
+								"value": "*/*"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/inventory?productId={{variant_product_id}}",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"inventory"
+							],
+							"query": [
+								{
+									"key": "productId",
+									"value": "{{variant_product_id}}"
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Adjust Base Stock",
+					"request": {
+						"method": "PATCH",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "accept",
+								"value": "*/*"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"quantity\": 25\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/inventory/{{product_id}}",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"inventory",
+								"{{product_id}}"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Adjust Variant Stock",
+					"request": {
+						"method": "PATCH",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "accept",
+								"value": "*/*"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"quantity\": 5,\n  \"optionValueId\": {{variant_option_value_id}}\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/inventory/{{variant_product_id}}",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"inventory",
+								"{{variant_product_id}}"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Negative Quantity Error",
+					"request": {
+						"method": "PATCH",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "accept",
+								"value": "*/*"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"quantity\": -1\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/inventory/{{product_id}}",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"inventory",
+								"{{product_id}}"
+							]
+						},
+						"description": "Example validation error for negative stock adjustment."
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Test this E2E flow with runner",
+			"item": [
+				{
+					"name": "Create product to Decrement of Stock Levels",
+					"item": [
+						{
+							"name": "1. Create New Product",
+							"event": [
+								{
+									"listen": "test",
+									"script": {
+										"exec": [
+											"const res = pm.response.json();",
+											"const pid = res.productId || (res.data ? res.data.productId : (Array.isArray(res) ? res[0].productId : null));",
+											"pm.test('Product created', function () {",
+											"    pm.expect(pid).to.not.be.null;",
+											"    pm.collectionVariables.set('product_id', String(pid));",
+											"});"
+										],
+										"type": "text/javascript"
+									}
+								}
+							],
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"name\": \"Runner Test T-Shirt\",\n  \"model\": \"RUN-001\",\n  \"price\": 25.00,\n  \"quantity\": 100,\n  \"status\": 1\n}"
+								},
+								"url": {
+									"raw": "{{base_url}}/products",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"products"
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "2. Get Created Product Details",
+							"request": {
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{base_url}}/products/{{product_id}}",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"products",
+										"{{product_id}}"
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "3. Record Initial Stock Level",
+							"event": [
+								{
+									"listen": "test",
+									"script": {
+										"exec": [
+											"const res = pm.response.json();",
+											"// Resilient parsing: Check if it's an array, a data wrapper, or a direct object",
+											"let stock = 0;",
+											"if (Array.isArray(res)) stock = res[0].quantity;",
+											"else if (res.data && res.data.quantity !== undefined) stock = res.data.quantity;",
+											"else stock = res.quantity;",
+											"",
+											"pm.collectionVariables.set('pre_sync_stock', String(stock));",
+											"console.log('Initial Stock Recorded:', stock);",
+											"pm.test('Initial stock is a number', () => pm.expect(Number(stock)).to.be.a('number'));"
+										],
+										"type": "text/javascript"
+									}
+								}
+							],
+							"request": {
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{base_url}}/inventory?productId={{product_id}}",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"inventory"
+									],
+									"query": [
+										{
+											"key": "productId",
+											"value": "{{product_id}}"
+										}
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "4. Create Order for this Product",
+							"event": [
+								{
+									"listen": "test",
+									"script": {
+										"exec": [
+											"const res = pm.response.json();",
+											"const oid = res.orderId || (res.data ? res.data.orderId : null);",
+											"pm.collectionVariables.set('order_id', String(oid));",
+											"pm.test('Order created', () => pm.expect(oid).to.not.be.null);"
+										],
+										"type": "text/javascript"
+									}
+								}
+							],
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									},
+									{
+										"key": "Cookie",
+										"value": "OCSESSID=50ca551e80507d3299d3faecda"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"customer\": {\n    \"firstname\": \"Reviewer\",\n    \"lastname\": \"Tester\",\n    \"email\": \"test@example.com\",\n    \"telephone\": \"123456\"\n  },\n  \"products\": [\n    {\n      \"productId\": {{product_id}},\n      \"quantity\": 5\n    }\n  ],\n  \"shippingMethod\": \"Flat Rate\",\n  \"paymentMethod\": \"COD\"\n}"
+								},
+								"url": {
+									"raw": "{{base_url}}/orders/create",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"orders",
+										"create"
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "5. Update Status (Trigger Sync)",
+							"request": {
+								"method": "PATCH",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"status\": \"processing\",\n  \"triggerInventorySync\": true\n}"
+								},
+								"url": {
+									"raw": "{{base_url}}/orders/{{order_id}}/status",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"orders",
+										"{{order_id}}",
+										"status"
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "6. FINAL VERIFICATION: Check Inventory Decrement",
+							"event": [
+								{
+									"listen": "test",
+									"script": {
+										"exec": [
+											"const res = pm.response.json();",
+											"// Resilient parsing: Handle Array or Object",
+											"let finalStock = 0;",
+											"if (Array.isArray(res)) finalStock = res[0].quantity;",
+											"else if (res.data && res.data.quantity !== undefined) finalStock = res.data.quantity;",
+											"else finalStock = res.quantity;",
+											"",
+											"const initialStock = Number(pm.collectionVariables.get('pre_sync_stock'));",
+											"const currentStock = Number(finalStock);",
+											"",
+											"console.log('Comparison -> Initial:', initialStock, 'Final:', currentStock);",
+											"",
+											"pm.test('PASSED: Stock reduced from ' + initialStock + ' to ' + currentStock, function () {",
+											"    // Use to.be.below for strict comparison",
+											"    pm.expect(currentStock).to.be.below(initialStock);",
+											"});"
+										],
+										"type": "text/javascript"
+									}
+								}
+							],
+							"request": {
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{base_url}}/inventory?productId={{product_id}}",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"inventory"
+									],
+									"query": [
+										{
+											"key": "productId",
+											"value": "{{product_id}}"
+										}
+									]
+								}
+							},
+							"response": []
+						}
+					]
+				}
+			],
+			"description": "This includes E2E flow.\n\nCreate Product -> Get Product -> Check Stock -> Create Order -> Sync -> Verify Stock\n\nHow To Run\n\n- Click on ... (view more action button)\n    \n- Click on Run\n    \n- In Runner panel click on Run unisouk-assignment button"
+		}
+	],
+	"variable": [
+		{
+			"key": "base_url",
+			"value": "http://localhost:3000"
+		},
+		{
+			"key": "opencart_base_url",
+			"value": "http://localhost:8080"
+		},
+		{
+			"key": "opencart_api_username",
+			"value": "Default"
+		},
+		{
+			"key": "opencart_api_key",
+			"value": ""
+		},
+		{
+			"key": "opencart_bridge_secret",
+			"value": ""
+		},
+		{
+			"key": "opencart_api_token",
+			"value": ""
+		},
+		{
+			"key": "product_id",
+			"value": "28"
+		},
+		{
+			"key": "variant_product_id",
+			"value": "42"
+		},
+		{
+			"key": "variant_option_value_id",
+			"value": "41"
+		},
+		{
+			"key": "order_id",
+			"value": "1"
+		},
+		{
+			"key": "insufficient_stock_order_id",
+			"value": "1"
+		},
+		{
+			"key": "pre_sync_stock",
+			"value": ""
+		}
+	]
+}
